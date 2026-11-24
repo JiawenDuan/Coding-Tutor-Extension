@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# 评测 base teacher（Llama / Qwen）作为 tutor，使用 privileged information（student prompt + z）。
+# 评测 base teacher 作为 tutor，使用 OPD 训练时的 privileged prompt 结构。
+#   prompt = student_instruction (无 Reference Knowledge) + privileged_context (Profile + Prior + Reference Knowledge)
+#   这与 SDFT teacher_prompt_template "{prompt}\n\n{privileged_context}" 完全一致。
+#
 # 输出目录：
-#   dialogue/.../vanilla/backbone/Llama-3.1-8B-Instruct-pt/
-#   dialogue/.../vanilla/backbone/Qwen3-8B-pt/
+#   dialogue/.../vanilla/backbone/Qwen3-8B-opd-teacher/
+#   student_posttest/.../vanilla/backbone/Qwen3-8B-opd-teacher/
 set -euo pipefail
 
 ROOT="/data/wangjian/Coding-Tutor-Extension"
@@ -14,7 +17,7 @@ export RUN_DIALOGUE_JOB=1
 
 export TUTOR_USE_BASE=1
 export TUTOR_SETTING=vanilla
-export TUTOR_PROMPT_SETTING=teacher
+export TUTOR_PROMPT_SETTING=opd_teacher
 export TUTOR_VLLM_PORT="${TUTOR_VLLM_PORT:-8001}"
 export STUDENT_VLLM_PORT="${STUDENT_VLLM_PORT:-8002}"
 export STUDENT_MODEL_PATH="${STUDENT_MODEL_PATH:-/data_old/models/Mixtral-8x7B-Instruct-v0.1-AWQ}"
@@ -23,22 +26,12 @@ export STUDENT_GPU_MEMORY_UTILIZATION="${STUDENT_GPU_MEMORY_UTILIZATION:-0.75}"
 
 unset EXTRA_DEP_JOB
 
-echo "========== Teacher backbone eval: Llama =========="
-export TUTOR_VLLM_BACKEND=llama
-export TUTOR_MODEL="Llama-3.1-8B-Instruct-pt"
-export TUTOR_VLLM_MODEL_NAME="Llama-3.1-8B-Instruct"
-export BASE_MODEL_PATH="/data_old/models/Llama-3.1-8B-Instruct"
-unset LORA_ADAPTER TUTOR_CHAT_TEMPLATE
-_llama_out="$(bash "$ROOT/scripts/run/submit_test.sh")"
-echo "$_llama_out"
-LLAMA_POST="$(echo "$_llama_out" | grep 'Post job' | tail -1 | awk '{print $NF}')"
-echo "Llama teacher post job: $LLAMA_POST"
-
-echo "========== Teacher backbone eval: Qwen（after Llama post $LLAMA_POST）=========="
-export EXTRA_DEP_JOB="$LLAMA_POST"
+echo "========== OPD Teacher eval: Qwen3-8B (base, no LoRA, with privileged context) =========="
 export TUTOR_VLLM_BACKEND=qwen
-export TUTOR_MODEL="Qwen3-8B-pt"
+export TUTOR_MODEL="Qwen3-8B-opd-teacher"
 export TUTOR_VLLM_MODEL_NAME="Qwen3-8B"
-export BASE_MODEL_PATH="/data_old/models/Qwen3-8B"
+export BASE_MODEL_PATH="${BASE_MODEL_PATH:-/data_old/models/Qwen3-8B}"
 export TUTOR_CHAT_TEMPLATE="$ROOT/scripts/run/qwen3_nonthinking.jinja"
+unset LORA_ADAPTER
+
 bash "$ROOT/scripts/run/submit_test.sh"

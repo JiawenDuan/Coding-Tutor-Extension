@@ -152,6 +152,34 @@ def prompt_tutor(d, tokenizer, setting="base", max_code_context=1024, student_le
             student_level=student_level,
         )
         return f"{base_part}\n\n{privileged_part}"
+    elif setting == "opd_teacher":
+        if student_level is None:
+            raise ValueError("student_level is required when setting='opd_teacher'.")
+        # OPD teacher = student_instruction (base WITHOUT Reference Knowledge)
+        #               + privileged_context (Profile + Prior + Reference Knowledge)
+        # This matches the SDFT teacher_prompt_template "{prompt}\n\n{privileged_context}".
+        _script_dir = os.path.dirname(os.path.abspath(__file__))
+        _project_root = os.path.dirname(os.path.dirname(_script_dir))
+        if _project_root not in sys.path:
+            sys.path.insert(0, _project_root)
+        from opd.privileged import split_instruction_privileged
+
+        base_part = prompt_tutor(
+            d, tokenizer, setting="base", max_code_context=max_code_context,
+        )
+        student_instruction, reference_knowledge = split_instruction_privileged(base_part)
+        privileged_part = prompt_tutor(
+            d, tokenizer, setting="privileged", max_code_context=max_code_context,
+            student_level=student_level,
+        )
+        # privileged_context = Profile + Prior + Reference Knowledge
+        # split_instruction_privileged returns "Reference Knowledge:- ..." (no newline
+        # after the colon); the stored train80 data has "Reference Knowledge:\n- ...".
+        # Insert a newline to match the stored format exactly.
+        if reference_knowledge.startswith("Reference Knowledge:") and not reference_knowledge.startswith("Reference Knowledge:\n"):
+            reference_knowledge = reference_knowledge.replace("Reference Knowledge:", "Reference Knowledge:\n", 1)
+        privileged_context = f"{privileged_part}\n\n{reference_knowledge}"
+        return f"{student_instruction}\n\n{privileged_context}"
     elif setting == "RG":
         template = open(f'prompt/template/tutor_RG.txt', 'r').read()
     elif setting == "KT":

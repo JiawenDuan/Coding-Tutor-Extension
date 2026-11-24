@@ -9,7 +9,7 @@ def parse_args():
     parser = ArgumentParser()
     parser.add_argument('--eval_mode', type=str, default='post-test', choices=['pre-test', 'post-test', 'oracle'])
     parser.add_argument('--pretest_dir', type=str, default='output/student_pretest/Mixtral-8x7B-Instruct')
-    parser.add_argument('--posttest_dir', type=str, default='/data/wangjian/Coding-Tutor-Extension/output/student_posttest/vanilla/sft/Qwen3-8B-sft-200')
+    parser.add_argument('--posttest_dir', type=str, default='/data/wangjian/Coding-Tutor-Extension/output/student_posttest/vanilla/backbone/Qwen3-8B')
     parser.add_argument('--namespace_file', type=str, default='prompt/namespaces.json')
     parser.add_argument('--data_file', type=str, default='/home/wangjian/EvoCodeBench/EvoCodeBench-2403/metadata.jsonl')
     parser.add_argument('--k', type=str, default='1,3,5,10')

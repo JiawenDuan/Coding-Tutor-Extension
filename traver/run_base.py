@@ -23,8 +23,8 @@ def parse_args():
         "--tutor_prompt_setting",
         type=str,
         default="base",
-        choices=["base", "student", "privileged", "teacher"],
-        help="Tutor system prompt: base (legacy), student (deployed OPD), privileged (z only), teacher (student+z).",
+        choices=["base", "student", "privileged", "teacher", "opd_teacher"],
+        help="Tutor system prompt: base (legacy), student (deployed OPD), privileged (z only), teacher (student+z), opd_teacher (OPD SDFT structure).",
     )
     parser.add_argument("--prompt_element_file", type=str, default='prompt/prompt_elements_final.jsonl')
     parser.add_argument("--output_dir", type=str,  required=True,
@@ -167,7 +167,7 @@ def main(args):
 
     prompt_data = []
     for d in tqdm(prompt_elements):
-        _priv_levels = ("privileged", "teacher")
+        _priv_levels = ("privileged", "teacher", "opd_teacher")
         tutor_desc = prompt_tutor(
             d,
             tokenizer,

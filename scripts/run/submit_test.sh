@@ -27,8 +27,9 @@ export ITERATION="${ITERATION:-first_iter}"
 # fi
 
 # 本地 LoRA tutor 配置仅在 TUTOR_VLLM_BACKEND=qwen/llama 时需要。
-export BASE_MODEL_PATH="/data_old/models/Qwen3-8B"
-export LORA_ADAPTER="/data/wangjian/Coding-Tutor-Extension/checkpoints/OPD/Qwen3-8B-1787576349/checkpoint-135"
+# 使用 :- 默认值，不覆盖外部脚本（如 submit_test_teacher_privileged.sh）已设的变量。
+export BASE_MODEL_PATH="${BASE_MODEL_PATH:-/data_old/models/Qwen3-8B}"
+export LORA_ADAPTER="${LORA_ADAPTER:-/data/wangjian/Coding-Tutor-Extension/checkpoints/OPD/Qwen3-8B-1787576349/checkpoint-135}"
 
 # remote 用 8004；本地 llama/qwen 默认 8002（可用环境变量覆盖）
 if [ "${TUTOR_VLLM_BACKEND:-remote}" = "remote" ]; then
