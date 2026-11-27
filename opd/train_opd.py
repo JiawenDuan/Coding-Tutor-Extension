@@ -29,10 +29,13 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument("--trainer", choices=["auto", "sdft", "distillation", "gkd"], default="auto")
     parser.add_argument("--model_name_or_path", required=True, help="Student base model path or HF id.")
-    parser.add_argument("--teacher_model_name_or_path", default=None, help="Local teacher path/HF id for GKD.")
+    parser.add_argument("--teacher_model_name_or_path", default=None, help="Teacher checkpoint. For SDFT, pass a local full model or PEFT adapter directory.")
     parser.add_argument("--teacher_model_server_url", default=None, help="External vLLM teacher server URL.")
     parser.add_argument("--use_teacher_server", action="store_true")
+    parser.add_argument("--separate_teacher_gpu", action="store_true",
+                        help="Single-process SDFT: train on cuda:0 and score with a fixed teacher on cuda:1.")
     parser.add_argument("--data_path", required=True)
+    parser.add_argument("--opd_mode", choices=["task", "level"], help="Required for SDFT.")
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--cache_dir", default=None)
     parser.add_argument("--max_train_samples", type=int, default=None)
@@ -53,7 +56,7 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument("--max_length", type=int, default=2048)
     parser.add_argument("--max_prompt_length", type=int, default=1536)
-    parser.add_argument("--max_new_tokens", type=int, default=256)
+    parser.add_argument("--max_new_tokens", type=int, default=320)
     parser.add_argument("--lmbda", type=float, default=1.0, help="1.0 means fully on-policy OPD.")
     parser.add_argument("--beta", type=float, default=0.5)
     parser.add_argument("--temperature", type=float, default=0.9)
@@ -88,7 +91,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lora_dropout", type=float, default=0.05)
     parser.add_argument("--lora_target_modules", nargs="+", default=["q_proj", "v_proj"])
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.separate_teacher_gpu and (resolve_trainer_name(args) != "sdft" or not args.teacher_model_name_or_path):
+        parser.error("--separate_teacher_gpu requires SDFT and a fixed teacher checkpoint")
+    if resolve_trainer_name(args) == "sdft" and not args.chat_template and Path(args.model_name_or_path).name.startswith("Qwen3"):
+        args.chat_template = str(Path(__file__).resolve().parents[1] / "scripts/run/qwen3_nonthinking.jinja")
+    if resolve_trainer_name(args) == "sdft" and not args.opd_mode:
+        parser.error("SDFT requires --opd_mode task or level")
+    if resolve_trainer_name(args) != "sdft" and args.opd_mode:
+        parser.error("--opd_mode requires the SDFT trainer")
+    return args
 
 
 def resolve_trainer_name(args: argparse.Namespace) -> str:
@@ -279,7 +291,64 @@ def train_with_sdft(args: argparse.Namespace, train_dataset, tokenizer, peft_con
     from trl.experimental.sdft import SDFTTrainer
 
     config = build_sdft_config(args)
-    trainer = SDFTTrainer(
+    if args.separate_teacher_gpu:
+        import torch
+
+        if torch.cuda.device_count() < 2 or config.world_size != 1 or config.device != torch.device("cuda:0"):
+            raise ValueError("Split teacher/student placement requires one Python process and two visible CUDA GPUs (student on cuda:0).")
+        # Trainer must not replicate the student on the GPU reserved for the teacher.
+        config._n_gpu = 1
+        config.model_init_kwargs["device_map"] = {"": 0}
+    trainer_class = SDFTTrainer
+    if args.teacher_model_name_or_path:
+        from contextlib import nullcontext
+        from transformers import AutoModelForCausalLM
+
+        checkpoint = Path(args.teacher_model_name_or_path)
+        if not checkpoint.is_dir():
+            raise FileNotFoundError(f"SDFT teacher checkpoint directory not found: {checkpoint}")
+        if args.teacher_model_kind != "base":
+            raise ValueError("A fixed teacher checkpoint requires --teacher_model_kind base.")
+        if not all(hasattr(SDFTTrainer, hook) for hook in (
+            "_setup_teacher_model", "_get_teacher_context_for_self_distillation",
+        )):
+            raise RuntimeError("Installed TRL SDFTTrainer lacks the teacher hooks required for a fixed checkpoint.")
+
+        class FixedTeacherTrainer(SDFTTrainer):
+            def _setup_teacher_model(self):
+                teacher_kwargs = build_model_init_kwargs(args)
+                if args.separate_teacher_gpu:
+                    teacher_kwargs["device_map"] = {"": 1}
+                if (checkpoint / "adapter_config.json").is_file():
+                    from peft import PeftConfig, PeftModel
+
+                    declared = PeftConfig.from_pretrained(str(checkpoint)).base_model_name_or_path
+                    # Training hosts may mount the same model under different directories.
+                    if not declared or Path(declared).name != Path(args.model_name_or_path).name:
+                        raise ValueError(f"Adapter declares backbone {declared!r}, selected {args.model_name_or_path!r}")
+                    base = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, **teacher_kwargs)
+                    teacher = PeftModel.from_pretrained(base, str(checkpoint), is_trainable=False)
+                else:
+                    teacher = AutoModelForCausalLM.from_pretrained(str(checkpoint), **teacher_kwargs)
+                teacher.requires_grad_(False)
+                teacher.eval()
+                self.teacher_model = teacher if args.separate_teacher_gpu else self.accelerator.prepare_model(teacher, evaluation_mode=True)
+                print(f"Loaded frozen SDFT teacher from {checkpoint} on {teacher.device}; student on {self.model.device}")
+
+            def _forward_logits(self, model, input_ids, attention_mask, logits_to_keep):
+                if args.separate_teacher_gpu and model is self.teacher_model:
+                    logits = super()._forward_logits(
+                        model, input_ids.to(model.device), attention_mask.to(model.device), logits_to_keep,
+                    )
+                    return logits.to(input_ids.device)
+                return super()._forward_logits(model, input_ids, attention_mask, logits_to_keep)
+
+            def _get_teacher_context_for_self_distillation(self):
+                # The teacher has its own weights. Keep its SFT adapter active.
+                return nullcontext()
+
+        trainer_class = FixedTeacherTrainer
+    trainer = trainer_class(
         model=args.model_name_or_path,
         args=config,
         processing_class=tokenizer,
@@ -300,7 +369,7 @@ def main() -> None:
     print(f"Student model: {args.model_name_or_path}")
     if trainer_name == "distillation" and (args.use_teacher_server or args.teacher_model_server_url):
         print(f"Teacher server: {args.teacher_model_server_url}")
-    elif trainer_name == "gkd":
+    elif args.teacher_model_name_or_path:
         print(f"Teacher model: {args.teacher_model_name_or_path}")
     elif trainer_name == "sdft":
         print(f"Teacher model kind: {args.teacher_model_kind} (same backbone as student)")
@@ -310,6 +379,7 @@ def main() -> None:
     if trainer_name == "sdft":
         train_dataset = load_sdft_dataset(
             args.data_path,
+            opd_mode=args.opd_mode,
             drop_last_assistant=drop_last_assistant,
             max_samples=args.max_train_samples,
         )

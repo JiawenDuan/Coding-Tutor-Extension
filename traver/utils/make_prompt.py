@@ -2,7 +2,10 @@ import json
 import os
 import re
 import sys
-from utils import load_json_data
+if __package__:
+    from .utils import load_json_data
+else:
+    from utils import load_json_data
 from tqdm import tqdm
 from argparse import ArgumentParser
 import tiktoken
@@ -133,53 +136,31 @@ def prompt_student_posttest(conversation, d, tokenizer, level, max_cognitive_loa
     
 
 def prompt_tutor(d, tokenizer, setting="base", max_code_context=1024, student_level=None):
-    # load template
-    if setting == "base":
-        template = open(f'prompt/template/tutor_base.txt', 'r').read()
-    elif setting == "student":
-        template = open(f'prompt/template/tutor_student.txt', 'r').read()
-    elif setting == "privileged":
-        template = open(f'prompt/template/tutor_privileged.txt', 'r').read()
-    elif setting == "teacher":
-        if student_level is None:
-            raise ValueError("student_level is required when setting='teacher'.")
-        # Teacher = shared tutor_base prompt + privileged missing-knowledge block.
-        base_part = prompt_tutor(
-            d, tokenizer, setting="base", max_code_context=max_code_context,
-        )
-        privileged_part = prompt_tutor(
-            d, tokenizer, setting="privileged", max_code_context=max_code_context,
-            student_level=student_level,
-        )
-        return f"{base_part}\n\n{privileged_part}"
-    elif setting == "opd_teacher":
-        if student_level is None:
-            raise ValueError("student_level is required when setting='opd_teacher'.")
-        # OPD teacher = student_instruction (base WITHOUT Reference Knowledge)
-        #               + privileged_context (Profile + Prior + Reference Knowledge)
-        # This matches the SDFT teacher_prompt_template "{prompt}\n\n{privileged_context}".
-        _script_dir = os.path.dirname(os.path.abspath(__file__))
-        _project_root = os.path.dirname(os.path.dirname(_script_dir))
-        if _project_root not in sys.path:
-            sys.path.insert(0, _project_root)
-        from opd.privileged import split_instruction_privileged
-
-        base_part = prompt_tutor(
-            d, tokenizer, setting="base", max_code_context=max_code_context,
-        )
-        student_instruction, reference_knowledge = split_instruction_privileged(base_part)
-        privileged_part = prompt_tutor(
-            d, tokenizer, setting="privileged", max_code_context=max_code_context,
-            student_level=student_level,
-        )
-        # privileged_context = Profile + Prior + Reference Knowledge
-        # split_instruction_privileged returns "Reference Knowledge:- ..." (no newline
-        # after the colon); the stored train80 data has "Reference Knowledge:\n- ...".
-        # Insert a newline to match the stored format exactly.
-        if reference_knowledge.startswith("Reference Knowledge:") and not reference_knowledge.startswith("Reference Knowledge:\n"):
-            reference_knowledge = reference_knowledge.replace("Reference Knowledge:", "Reference Knowledge:\n", 1)
-        privileged_context = f"{privileged_part}\n\n{reference_knowledge}"
-        return f"{student_instruction}\n\n{privileged_context}"
+    if setting in ("base", "student"):
+        template = open('prompt/template/tutor_base.txt').read()
+    elif setting == "privileged_task":
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        with open(os.path.join(root, 'prompt/template/tutor_privileged_task.txt')) as f:
+            template = f.read()
+    elif setting in ("privileged", "privileged_student_level"):
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from opd.privileged import student_missing_summary
+        with open(os.path.join(root, 'prompt/template/tutor_privileged_student_level.txt')) as f:
+            template = f.read()
+        context = d['contexts_above']
+        ids = tokenizer.encode(context)
+        if len(ids) > max_code_context:
+            context = tokenizer.decode(ids[-max_code_context:])
+        return template.format(student_missing_knowledge=student_missing_summary(d, student_level, code_context=context))
+    elif setting in ("task_teacher", "level_teacher", "teacher", "opd_teacher"):
+        parts = [prompt_tutor(d, tokenizer, "base", max_code_context)]
+        if setting != "task_teacher":
+            parts.append(prompt_tutor(d, tokenizer, "privileged_student_level", max_code_context, student_level))
+        if setting != "level_teacher":
+            parts.append(prompt_tutor(d, tokenizer, "privileged_task", max_code_context))
+        return "\n\n".join(parts)
     elif setting == "RG":
         template = open(f'prompt/template/tutor_RG.txt', 'r').read()
     elif setting == "KT":
@@ -195,7 +176,7 @@ def prompt_tutor(d, tokenizer, setting="base", max_code_context=1024, student_le
     else:
         input_code = d['input_code']
 
-    if setting == "student":
+    if setting in ("base", "student"):
         return template.format(
             function_name=d['function_name'],
             input_code=input_code,
@@ -220,24 +201,6 @@ def prompt_tutor(d, tokenizer, setting="base", max_code_context=1024, student_le
         contexts_above = tokenizer.decode(contexts_above_ids)
     else:
         contexts_above = d['contexts_above']
-
-    if setting == "privileged":
-        if student_level is None:
-            raise ValueError("student_level is required when setting='privileged'.")
-
-        _script_dir = os.path.dirname(os.path.abspath(__file__))
-        _project_root = os.path.dirname(os.path.dirname(_script_dir))
-        if _project_root not in sys.path:
-            sys.path.insert(0, _project_root)
-        from opd.privileged import STUDENT_LEVEL_LABELS, student_prior_knowledge
-
-        if student_level not in STUDENT_LEVEL_LABELS:
-            raise ValueError(f"Unsupported student level for privileged tutor prompt: {student_level}")
-
-        return template.format(
-            student_level_label=STUDENT_LEVEL_LABELS[student_level],
-            student_prior_knowledge=student_prior_knowledge(d, student_level),
-        )
 
     if setting == "RG":
         prompt = template

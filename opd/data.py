@@ -91,7 +91,8 @@ def to_messages(record: dict[str, Any], *, drop_last_assistant: bool = True) -> 
     return messages
 
 
-def to_sdft_record(record: dict[str, Any], *, drop_last_assistant: bool = True) -> dict[str, Any]:
+def to_sdft_record(record: dict[str, Any], *, drop_last_assistant: bool = True,
+                   privileged_context: str | None = None) -> dict[str, Any]:
     """Convert one repo record to TRL SDFT format.
 
     Student prompt encodes the ordinary state s_t (task + dialogue history).
@@ -99,7 +100,8 @@ def to_sdft_record(record: dict[str, Any], *, drop_last_assistant: bool = True) 
     prior/missing knowledge, etc.).
     """
     student_instruction = student_observation(record)
-    privileged_context = build_privileged_from_record(record)
+    if privileged_context is None:
+        privileged_context = build_privileged_from_record(record)
 
     messages = [{"role": "user", "content": student_instruction}]
     for turn in record.get("conversations", []):
@@ -140,13 +142,42 @@ def build_sdft_records(
     *,
     drop_last_assistant: bool = True,
     max_samples: int | None = None,
+    opd_mode: str | None = None,
 ) -> list[dict[str, Any]]:
     if max_samples is not None:
         records = records[:max_samples]
 
+    contexts = {}
+    if opd_mode is not None:
+        if opd_mode not in {"task", "level"}:
+            raise ValueError("opd_mode must be task or level")
+        import sys
+        import tiktoken
+
+        root = Path(__file__).resolve().parents[1]
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+        from traver.utils.make_prompt import prompt_tutor
+
+        elements = {e["namespace"]: e for e in read_records(root / "prompt/prompt_elements_final.jsonl")}
+        tokenizer = tiktoken.encoding_for_model("gpt-4")
+        setting = "privileged_task" if opd_mode == "task" else "privileged_student_level"
+
     converted = []
     for idx, record in enumerate(records):
-        item = to_sdft_record(record, drop_last_assistant=drop_last_assistant)
+        context = None
+        if opd_mode is not None:
+            namespace = record.get("namespace")
+            if namespace not in elements:
+                raise ValueError(f"Record {idx}: missing or unknown namespace {namespace!r} for {opd_mode} mode")
+            level = record.get("student_level") if opd_mode == "level" else None
+            if opd_mode == "level" and level not in {"low_level", "med_level", "high_level"}:
+                raise ValueError(f"Record {idx} ({namespace}): missing or invalid student_level {level!r}")
+            key = (namespace, level)
+            if key not in contexts:
+                contexts[key] = prompt_tutor(elements[namespace], tokenizer, setting, student_level=level)
+            context = contexts[key]
+        item = to_sdft_record(record, drop_last_assistant=drop_last_assistant, privileged_context=context)
         item["source_index"] = record.get("id", idx)
         converted.append(item)
     return converted
@@ -178,6 +209,7 @@ def load_message_dataset(
 def load_sdft_dataset(
     path: str | Path,
     *,
+    opd_mode: str,
     drop_last_assistant: bool = True,
     max_samples: int | None = None,
 ):
@@ -188,6 +220,7 @@ def load_sdft_dataset(
     return Dataset.from_list(
         build_sdft_records(
             records,
+            opd_mode=opd_mode,
             drop_last_assistant=drop_last_assistant,
             max_samples=max_samples,
         )

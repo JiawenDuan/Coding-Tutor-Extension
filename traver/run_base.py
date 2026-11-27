@@ -23,7 +23,7 @@ def parse_args():
         "--tutor_prompt_setting",
         type=str,
         default="base",
-        choices=["base", "student", "privileged", "teacher", "opd_teacher"],
+        choices=["base", "student", "privileged", "teacher", "opd_teacher", "task_teacher", "level_teacher"],
         help="Tutor system prompt: base (legacy), student (deployed OPD), privileged (z only), teacher (student+z), opd_teacher (OPD SDFT structure).",
     )
     parser.add_argument("--prompt_element_file", type=str, default='prompt/prompt_elements_final.jsonl')
@@ -94,7 +94,7 @@ def interactive_simulation(args, prompt_data, tutor_backend, student_backend, mo
             if js["namespace"] in finished_data:
                 continue
 
-            if args.tutor_setting in ("vanilla", "privileged_teacher"):
+            if args.tutor_setting in ("vanilla", "vanilla_base", "privileged_teacher"):
                 tutor = Player(
                     name="tutor", role_desc=js["tutor_desc"], 
                     backend=tutor_backend,
@@ -167,7 +167,7 @@ def main(args):
 
     prompt_data = []
     for d in tqdm(prompt_elements):
-        _priv_levels = ("privileged", "teacher", "opd_teacher")
+        _priv_levels = ("privileged", "teacher", "opd_teacher", "level_teacher")
         tutor_desc = prompt_tutor(
             d,
             tokenizer,

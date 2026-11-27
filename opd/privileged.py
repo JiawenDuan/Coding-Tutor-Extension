@@ -96,25 +96,27 @@ def student_known_summary(element: dict[str, Any], student_level: str) -> str:
     return "\n".join(lines) if lines else "- none"
 
 
-def student_missing_summary(element: dict[str, Any], student_level: str) -> str:
-    """Knowledge missing from the student simulator prompt."""
-    _, missing_dep_indices = student_knowledge_gaps(element, student_level)
-    lines: list[str] = []
+def student_missing_summary(element: dict[str, Any], student_level: str, *, code_context: str) -> str:
+    """Describe reference material omitted from the simulator's initial prompt."""
+    if student_level not in STUDENT_LEVEL_LABELS:
+        raise ValueError(f"Unsupported student level: {student_level}")
 
-    if student_level in {"low_level", "med_level"}:
-        lines.append("- Repository context (contexts_above)")
+    sections = []
+    if student_level != "high_level" and code_context.strip():
+        sections.append(f"Repository code above the target function:\n```python\n{code_context}\n```")
 
-    dep_labels = _compact_kc_labels(missing_dep_indices)
-    if dep_labels != "none":
-        lines.append(f"- Dependencies: {dep_labels}")
+    # Entries start with an unindented symbol path. Indented signatures and
+    # docstrings may contain blank lines, so splitting on paragraphs loses names.
+    path_pattern = r"(?m)^[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*[ \t]*$"
+    all_paths = dict.fromkeys(p.rstrip() for p in re.findall(path_pattern, element["dependency_all"]))
+    known = set()
+    if student_level != "low_level":
+        known = {p.rstrip() for p in re.findall(path_pattern, element["dependency_sampled"])}
+    missing = [f"- {path}" for path in all_paths if path not in known]
+    if missing:
+        sections.append("Dependencies:\n" + "\n".join(missing))
 
-    steps_all = _parse_reference_steps(element.get("reference_steps", ""))
-    if steps_all:
-        step_offset = len(_parse_dependency_paths(element.get("dependency_all", "")))
-        step_labels = _compact_kc_labels(list(range(step_offset + 1, step_offset + len(steps_all) + 1)))
-        lines.append(f"- Solution steps: {step_labels}")
-
-    return "\n".join(lines) if lines else "- none"
+    return "\n\n".join(sections) or "No additional repository context or dependencies were withheld."
 
 
 def student_prior_knowledge(element: dict[str, Any], student_level: str) -> str:

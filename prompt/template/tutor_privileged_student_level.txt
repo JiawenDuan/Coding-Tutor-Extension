@@ -1,5 +1,4 @@
-Privileged Student Profile:
-- Simulated student level: {student_level_label}
+The following information was not provided to the student at the start of the task:
+{student_missing_knowledge}
 
-Privileged Student Prior / Missing Knowledge:
-{student_prior_knowledge}
+As the conversation progresses, you may use the student's explanations, questions, and code attempts to infer which of these points they already understand and how much guidance would help them take the next step.

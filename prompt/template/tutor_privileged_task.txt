@@ -1,0 +1,9 @@
+Reference Knowledge:
+- The contexts above the {function_name} function:
+```Python
+{contexts_above}
+```
+- The dependency paths for the {function_name} function:
+{dependency_path}
+- The reference key solution steps:
+{reference_steps}
