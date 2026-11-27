@@ -1,0 +1,14 @@
+Starting coding test for vanilla/first_iter/Llama-3.1-8B-Instruct-sft-200_self at Monday, April 06, 2026 PM06:53:16 HKT
+Running recall@1,3,5,10 for tutor_setting: vanilla model: Llama-3.1-8B-Instruct-sft-200_self student_level: low_level
+Completed recall@1,3,5,10 for vanilla/first_iter/Llama-3.1-8B-Instruct-sft-200_self/low_level at Monday, April 06, 2026 PM07:00:34 HKT
+Running pass@1,3,5,10 for tutor_setting: vanilla model: Llama-3.1-8B-Instruct-sft-200_self student_level: low_level
+Completed pass@1,3,5,10 for vanilla/first_iter/Llama-3.1-8B-Instruct-sft-200_self/low_level at Monday, April 06, 2026 PM07:34:41 HKT
+Running recall@1,3,5,10 for tutor_setting: vanilla model: Llama-3.1-8B-Instruct-sft-200_self student_level: med_level
+Completed recall@1,3,5,10 for vanilla/first_iter/Llama-3.1-8B-Instruct-sft-200_self/med_level at Monday, April 06, 2026 PM07:42:05 HKT
+Running pass@1,3,5,10 for tutor_setting: vanilla model: Llama-3.1-8B-Instruct-sft-200_self student_level: med_level
+Completed pass@1,3,5,10 for vanilla/first_iter/Llama-3.1-8B-Instruct-sft-200_self/med_level at Monday, April 06, 2026 PM08:19:45 HKT
+Running recall@1,3,5,10 for tutor_setting: vanilla model: Llama-3.1-8B-Instruct-sft-200_self student_level: high_level
+Completed recall@1,3,5,10 for vanilla/first_iter/Llama-3.1-8B-Instruct-sft-200_self/high_level at Monday, April 06, 2026 PM08:26:18 HKT
+Running pass@1,3,5,10 for tutor_setting: vanilla model: Llama-3.1-8B-Instruct-sft-200_self student_level: high_level
+Completed pass@1,3,5,10 for vanilla/first_iter/Llama-3.1-8B-Instruct-sft-200_self/high_level at Monday, April 06, 2026 PM09:01:38 HKT
+All tests completed for vanilla/first_iter/Llama-3.1-8B-Instruct-sft-200_self at Monday, April 06, 2026 PM09:01:38 HKT
