@@ -1,6 +1,0 @@
-Starting coding test for vanilla/backbone/gpt-4o at Friday, May 01, 2026 PM09:23:44 HKT
-Running recall@1,3,5,10 for tutor_setting: vanilla model: gpt-4o student_level: high_level
-Completed recall@1,3,5,10 for vanilla/backbone/gpt-4o/high_level at Friday, May 01, 2026 PM09:23:44 HKT
-Running pass@1,3,5,10 for tutor_setting: vanilla model: gpt-4o student_level: high_level
-Completed pass@1,3,5,10 for vanilla/backbone/gpt-4o/high_level at Friday, May 01, 2026 PM09:50:20 HKT
-All tests completed for vanilla/backbone/gpt-4o at Friday, May 01, 2026 PM09:50:20 HKT
