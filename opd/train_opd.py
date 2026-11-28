@@ -319,6 +319,8 @@ def train_with_sdft(args: argparse.Namespace, train_dataset, tokenizer, peft_con
         class FixedTeacherTrainer(SDFTTrainer):
             def _setup_teacher_model(self):
                 teacher_kwargs = build_model_init_kwargs(args)
+                teacher_kwargs.pop("torch_dtype", None)
+                teacher_kwargs["dtype"] = torch.float32
                 if args.separate_teacher_gpu:
                     teacher_kwargs["device_map"] = {"": 1}
                 if (checkpoint / "adapter_config.json").is_file():
@@ -355,6 +357,29 @@ def train_with_sdft(args: argparse.Namespace, train_dataset, tokenizer, peft_con
         from transformers import TrainerCallback
 
         class CheckLossTrainer(trainer_class):
+
+            def _compute_teacher_student_logits(self, *args, **kwargs):
+                result = super()._compute_teacher_student_logits(*args, **kwargs)
+                for name in ["student_logits", "teacher_logits"]:
+                    x = getattr(result, name).detach()
+                    print(
+                        f"[DEBUG] {name}: "
+                        f"dtype={x.dtype}, "
+                        f"shape={tuple(x.shape)}, "
+                        f"nan={torch.isnan(x).sum().item()}, "
+                        f"inf={torch.isinf(x).sum().item()}",
+                        flush=True,
+                    )
+                print(
+                    f"[DEBUG] loss_mask={result.loss_mask.sum().item()}",
+                    flush=True,
+                )
+                print(
+                    f"[DEBUG] distillation_mode={self.args.distillation_mode}",
+                    flush=True,
+                )
+                return result
+
             def compute_loss(self, *inputs, **kwargs):
                 result = super().compute_loss(*inputs, **kwargs)
                 loss = result[0] if isinstance(result, tuple) else result
