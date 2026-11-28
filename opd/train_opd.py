@@ -39,6 +39,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--cache_dir", default=None)
     parser.add_argument("--max_train_samples", type=int, default=None)
+    parser.add_argument("--check_finite", action="store_true",
+                        help="SDFT diagnostics: stop on non-finite loss or student gradients before updating weights.")
 
     parser.add_argument("--num_train_epochs", type=float, default=1.0)
     parser.add_argument("--max_steps", type=int, default=-1)
@@ -348,6 +350,25 @@ def train_with_sdft(args: argparse.Namespace, train_dataset, tokenizer, peft_con
                 return nullcontext()
 
         trainer_class = FixedTeacherTrainer
+    if args.check_finite:
+        import torch
+        from transformers import TrainerCallback
+
+        class CheckLossTrainer(trainer_class):
+            def compute_loss(self, *inputs, **kwargs):
+                result = super().compute_loss(*inputs, **kwargs)
+                loss = result[0] if isinstance(result, tuple) else result
+                if not torch.isfinite(loss).all().item():
+                    raise FloatingPointError(f"Non-finite SDFT loss at global_step={self.state.global_step}")
+                return result
+
+        class CheckGradients(TrainerCallback):
+            def on_pre_optimizer_step(self, args, state, control, model, **kwargs):
+                for name, param in model.named_parameters():
+                    if param.grad is not None and not torch.isfinite(param.grad).all().item():
+                        raise FloatingPointError(f"Non-finite gradient before update at global_step={state.global_step}: {name}")
+
+        trainer_class = CheckLossTrainer
     trainer = trainer_class(
         model=args.model_name_or_path,
         args=config,
@@ -355,6 +376,8 @@ def train_with_sdft(args: argparse.Namespace, train_dataset, tokenizer, peft_con
         train_dataset=train_dataset,
         peft_config=peft_config,
     )
+    if args.check_finite:
+        trainer.add_callback(CheckGradients())
     trainer.train()
     trainer.save_model(args.output_dir)
     tokenizer.save_pretrained(args.output_dir)
