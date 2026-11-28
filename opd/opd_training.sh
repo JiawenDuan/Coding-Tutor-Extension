@@ -12,7 +12,7 @@ set -u
 # Qwen3-8B experiment settings. Edit the defaults here or override them in the environment.
 OPD_MODE="${OPD_MODE:-}"  # Required: task or level
 BACKBONE_PATH="${BACKBONE_PATH:-/data/models/Qwen3-8B}"
-TEACHER_ADAPTER_PATH="${TEACHER_ADAPTER_PATH:-checkpoints/sft-Qwen3-8B/checkpoint-200}"
+TEACHER_ADAPTER_PATH="${TEACHER_ADAPTER_PATH:-/data/wangjian/Coding-Tutor-Extension-old/checkpoints/sft-Qwen3-8B/checkpoint-200}"
 DATA_PATH="${DATA_PATH:-}"  # Required: path to the OPD training dataset
 
 case "$OPD_MODE" in

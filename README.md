@@ -18,13 +18,13 @@ OPD_MODE=level DATA_PATH=output/opd/Qwen3-8B/train.jsonl sbatch opd/opd_training
 # Llama-3.1-8B-Instruct
 OPD_MODE=task \
 BACKBONE_PATH=/data_old/models/Llama-3.1-8B-Instruct \
-TEACHER_ADAPTER_PATH=checkpoints/sft-Llama-3.1-8B-Instruct/checkpoint-200 \
+TEACHER_ADAPTER_PATH=/data/wangjian/Coding-Tutor-Extension-old/checkpoints/sft-Llama-3.1-8B-Instruct/checkpoint-200 \
 DATA_PATH=output/opd/Llama-3.1-8B-Instruct/train.jsonl \
 sbatch opd/opd_training.sh
 
 OPD_MODE=level \
 BACKBONE_PATH=/data_old/models/Llama-3.1-8B-Instruct \
-TEACHER_ADAPTER_PATH=checkpoints/sft-Llama-3.1-8B-Instruct/checkpoint-200 \
+TEACHER_ADAPTER_PATH=/data/wangjian/Coding-Tutor-Extension-old/checkpoints/sft-Llama-3.1-8B-Instruct/checkpoint-200 \
 DATA_PATH=output/opd/Llama-3.1-8B-Instruct/train.jsonl \
 sbatch opd/opd_training.sh
 ```
@@ -36,7 +36,7 @@ sbatch opd/opd_training.sh
 | `OPD_MODE` | 是 | 无 | `task`（teacher 看到任务相关的 privileged 信息）或 `level`（teacher 看到学生水平信息） |
 | `DATA_PATH` | 是 | 无 | 训练数据，`output/opd/<backbone>/train.jsonl` |
 | `BACKBONE_PATH` | 否 | `/data/models/Qwen3-8B` | student 的 base 模型 |
-| `TEACHER_ADAPTER_PATH` | 否 | `checkpoints/sft-Qwen3-8B/checkpoint-200` | teacher 的 SFT adapter，必须和 backbone 配套 |
+| `TEACHER_ADAPTER_PATH` | 否 | `/data/wangjian/Coding-Tutor-Extension-old/checkpoints/sft-Qwen3-8B/checkpoint-200` | teacher 的 SFT adapter，必须和 backbone 配套 |
 | `OUTPUT_DIR` | 否 | `checkpoints/OPD/<backbone 目录名>-opd-<OPD_MODE>` | 模型保存位置 |
 
 `sbatch opd/opd_training.sh` 后面写的参数会原样传给 `opd/train_opd.py`。先用少量数据试跑时，记得换一个输出目录：
@@ -152,8 +152,8 @@ output/student_posttest/vanilla_base/<组>/<运行名>/test_progress.log
 | --- | --- |
 | `QWEN_BASE` | `/data_old/models/Qwen3-8B` |
 | `LLAMA_BASE` | `/data_old/models/Llama-3.1-8B-Instruct` |
-| `QWEN_SFT` | `checkpoints/sft-Qwen3-8B/checkpoint-200` |
-| `LLAMA_SFT` | `checkpoints/sft-Llama-3.1-8B-Instruct/checkpoint-200` |
+| `QWEN_SFT` | `/data/wangjian/Coding-Tutor-Extension-old/checkpoints/sft-Qwen3-8B/checkpoint-200` |
+| `LLAMA_SFT` | `/data/wangjian/Coding-Tutor-Extension-old/checkpoints/sft-Llama-3.1-8B-Instruct/checkpoint-200` |
 | `OPD_DIR` | `checkpoints/OPD` |
 | `STUDENT_MODEL_PATH` | `/data_old/models/Mixtral-8x7B-Instruct-v0.1-AWQ` |
 
